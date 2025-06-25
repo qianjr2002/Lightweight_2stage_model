@@ -3,11 +3,9 @@ import torch.nn as nn
 import hparams as hp
 from GrouedGRU import GroupedGRU
 from GroupLinear import GroupedLinear
-import numpy as np
 from thop import profile
 from thop import clever_format
-from ptflops import get_model_complexity_info
-import math
+
 
 class Stage1(nn.Module):
     #input:batch channel T F
@@ -225,7 +223,6 @@ class spec_complex(nn.Module):
             enhance_spec_imag =  enhance_spec_mag * torch.sin(enhance_spec_phase)
             enhance_spec_complex = torch.complex(enhance_spec_real, enhance_spec_imag)
             spec_out = torch.view_as_real(enhance_spec_complex)
-
         return full_mask, mask_final,enhance_spec_mag, spec_out
 
 
@@ -306,52 +303,31 @@ class lps_complex(nn.Module):
 if __name__=='__main__':
     hp = hp
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model1 = Stage1()
-    model2 = lps_real()
-    model3 = lps_complex()
-    model4= spec_complex()
+    model1 = Stage1().to(device)
+    model2 = lps_real().to(device)
+    model3 = lps_complex().to(device)
+    model4 = spec_complex().to(device)
 
+    fbank = torch.randn(hp.batch_size,1,63,32).to(device)      #FBANK
+    spec = torch.randn(hp.batch_size,257,63,2).to(device)
+    lps = torch.randn(hp.batch_size,63,257).to(device)  # COMPLEX
 
-    fbank = torch.randn(hp.batch_size,1,252,32)      #FBANK
-    spec = torch.randn(hp.batch_size,257,252,2)
-    lps= torch.randn(hp.batch_size,252,257)  # COMPLEX
-
-    # flop, params = profile(model1, inputs=(hp,fbank ,spec,lps))
-    # macs, params = clever_format([flop, params], "%.3f")
-    # print("lps_complex macs = %s parasms = %s" % (macs, params))
-
-    # flop, params = profile(model2, inputs=(hp,fbank,spec,lps))
-    # macs, params = clever_format([flop, params], "%.3f")
-    # print("group_gru_linear macs = %s parasms = %s" % (macs, params))
-    # #
-
-    # flop, params = profile(model3, inputs=(hp,fbank,spec,lps))
-    # macs, params = clever_format([flop, params], "%.3f")
-    # print("complex macs = %s parasms = %s" % (macs, params))
-
-    flop, params = profile(model4, inputs=(hp,fbank,spec,lps))
+    flop, params = profile(model1, inputs=(hp, fbank, spec, lps, device))
     macs, params = clever_format([flop, params], "%.3f")
-    print("complex macs = %s parasms = %s" % (macs, params))
+    print("Stage1 macs = %s parasms = %s" % (macs, params))
+    # Stage1 macs = 4.080M parasms = 15.808K
 
-    # total_params = sum(p.numel() for p in model1.parameters())
-    # print("encode1 total params:",total_params)
-    #
-    # total_params = sum(p.numel() for p in model3.parameters())
-    # print("group_gru_linear_DF total params:",total_params)
-    # total_params = sum(p.numel() for p in model4.parameters())
-    # print("complex total params:",total_params)
-    # total_params = sum(p.numel() for p in model5.parameters())
-    # print("LPS_complex total params:",total_params)
+    flop, params = profile(model2, inputs=(hp, fbank, spec, lps, device))
+    macs, params = clever_format([flop, params], "%.3f")
+    print("lps_real macs = %s parasms = %s" % (macs, params))
+    # lps_real macs = 19.346M parasms = 65.217K
 
+    flop, params = profile(model3, inputs=(hp, fbank, spec, lps, device))
+    macs, params = clever_format([flop, params], "%.3f")
+    print("lps_complex complex macs = %s parasms = %s" % (macs, params))
+    # lps_complex complex macs = 20.087M parasms = 78.308K
 
-
-
-
-
-
-
-
-
-
-
-
+    flop, params = profile(model4, inputs=(hp, fbank, spec, lps, device))
+    macs, params = clever_format([flop, params], "%.3f")
+    print("spec_complex complex macs = %s parasms = %s" % (macs, params))
+    # spec_complex complex macs = 30.804M parasms = 119.812K
